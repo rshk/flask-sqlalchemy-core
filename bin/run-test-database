@@ -1,0 +1,53 @@
+#!/bin/bash
+
+
+INSTANCE_NAME=flask-sqlalchemy-core-test
+DB_NAME=flask-sqlalchemy-core-test
+TEST_POSTGRES_VERSION="${TEST_POSTGRES_VERSION:-10}"
+
+# Generate a random password for the database.
+# Will fall back to a hard-coded one if pwgen is not installed.
+DB_PASSWORD=$( which pwgen &>/dev/null && pwgen -s 20 1 || echo 4q3R90C8yVddUFaaJESH )
+
+
+function horizontal_line() {
+    printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' '='
+}
+
+# Start detached (so we can show DATABASE_URL to the user).
+docker run --detach --rm --name flask-sqlalchemy-core-test \
+    -e POSTGRES_PASSWORD="${DB_PASSWORD}" \
+    -e POSTGRES_DB="$DB_NAME" \
+    postgres:"${TEST_POSTGRES_VERSION}"
+
+DB_HOST="$( docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$INSTANCE_NAME" )"
+DATABASE_URL="postgresql://postgres:${DB_PASSWORD}@${DB_HOST}:5432/${DB_NAME}"
+
+
+cat <<EOF
+[1;32m$(horizontal_line)[0m
+
+[1mDatbase instance started. You can now set DATABASE_URL:[0m
+
+    export DATABASE_URL="${DATABASE_URL}"
+
+[1mTo run the test suite:[0m
+
+    pytest -vvv ./tests
+
+[1mOr just:[0m
+
+    DATABASE_URL="${DATABASE_URL}" pytest -vvv ./tests
+
+[1;32m$(horizontal_line)[0m
+EOF
+
+# Give them time to copy-paste the DATABASE_URL line
+read -n1 -s -p $'Press any key to continue...\n'
+
+# Attach to the docker container.
+# Once attached, a Ctrl-C will kill the actual process, so there is no
+# need to kill it manually afterwards via ``docker kill``.
+
+echo "Attaching to docker container..."
+docker attach "$INSTANCE_NAME"
