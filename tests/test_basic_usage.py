@@ -1,4 +1,4 @@
-from tests.utils import NotesTable
+from tests.utils import NotesTable, require_nested_transactions
 from sqlalchemy import insert, select, func
 
 
@@ -34,6 +34,7 @@ def test_transaction_rolls_back_on_exception(db):
     assert _count_rows(db, NotesTable) == 0
 
 
+@require_nested_transactions
 def test_partial_transaction_commit(db):
     with db.transaction() as conn:
         conn.execute(insert(NotesTable).values(name='A'))
@@ -69,6 +70,7 @@ def _get_all_rows(db, table):
         return list(result)
 
 
+@require_nested_transactions
 class TestOneTransaction:
 
     def test_insert_data_in_transaction(self, db):
@@ -80,6 +82,7 @@ class TestOneTransaction:
         assert _count_rows(db, NotesTable) == 0
 
 
+@require_nested_transactions
 class TestNestedTransactions:
 
     def test_insert_data_in_transaction(self, db):
@@ -95,6 +98,7 @@ class TestNestedTransactions:
         assert _count_rows(db, NotesTable) == 0
 
 
+@require_nested_transactions
 class TestNestedTransactionsWithRollback:
 
     def test_insert_data_in_transaction(self, db):
@@ -117,3 +121,24 @@ class TestNestedTransactionsWithRollback:
 
     def test_db_was_emptied(self, db):
         assert _count_rows(db, NotesTable) == 0
+
+
+@require_nested_transactions
+def test_exception_in_outer_transaction(db):
+
+    try:
+
+        with db.transaction() as conn:
+
+            with db.transaction():
+                conn.execute(insert(NotesTable).values(name='A'))
+
+            with db.transaction():
+                conn.execute(insert(NotesTable).values(name='B'))
+
+            raise ValueError
+
+    except ValueError:
+        pass
+
+    assert _count_rows(db, NotesTable) == 0
