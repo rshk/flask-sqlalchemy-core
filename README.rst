@@ -1,16 +1,22 @@
 Flask / SQLAlchemy Core
 #######################
 
-Provides integration for using SQLAlchemy Core in a Flask application.
+SQLAlchemy Core integration for Flask application.
 
-Most importantly, it provides a mechanism for sharing the same
-connection across nested functions (in the same thread /
-greenlet).
+Provides an easy way for setting up and using SQLAlchemy Core in Flask
+(or Werkzeug-based, really) applications.
 
-This allows for cleaner nested transactions, and also reduces test run
-time by wrapping each test function run in a transaction which will be
-rolled back at the end, removing the need to fully recreate the whole
-database schema over and over.
+The main benefit of using this package over plain SQLAlchemy is the
+ability of sharing the current connection in a context-local "global"
+object.
+
+This allows creating nested transactions without having to explicitly
+pass the connection object across functions.
+
+This in turn enables running test functions inside a transaction,
+which will be rolled back on test teardown, greatly reducing test run
+time, by removing the need of continuously dropping and re-creating
+the whole database schema for each test function run.
 
 
 Usage
@@ -44,12 +50,53 @@ Running queries
         # Do something with the result...
 
 
+Transactions
+------------
+
+.. code-block:: python
+
+    with db.transaction() as conn:
+        result = conn.execute(query)
+
+
+The transaction will automatically committed upon a successful exit
+from the "with" block, or rolled back if an exception was raised.
+
+
+Nested transactions
+-------------------
+
+Simply nest ``with db.transaction():`` blocks.
+
+This allows for more reusable code, for example:
+
+.. code-block:: python
+
+    def create_user(...):
+        with db.transaction() as conn:
+            # Create record in the users table
+            conn.execute(...)
+            # Other data for the user in some other table
+            conn.execute(...)
+
+    def create_client(...):
+        with db.transaction() as conn:
+            # Create record in the clients table
+            conn.execute(...)
+            # ...other data for this client...
+            conn.execute(...)
+
+    def setup_new_client(client_name, user_name):
+        with db.transaction():
+            create_user(user_name)
+            create_client(client_name)
+
 
 Define tables
 -------------
 
-Just do as you normally would (create a Metadata
-instance, use it to define your schema).
+Just do as you normally would (create a Metadata instance, use it to
+define your schema).
 
 
 Creating schema
@@ -97,6 +144,24 @@ database.
         metadata.drop_all(engine)
 
 
+Database migrations
+-------------------
+
+Use Alembic_ for creating database migrations.
+
+
+.. _Alembic: https://alembic.zzzcomputing.com/en/latest/
+
+
+Database support
+================
+
+The library is currently tested with PostgreSQL (10).
+
+Everything should work with other backends too (except nested
+transactions, on backends that don't support checkpoints).
+
+
 Testing
 =======
 
@@ -118,3 +183,11 @@ To install test dependencies::
 To run the test suite::
 
     pytest -vvv ./tests
+
+
+To run tests using SQLite backend::
+
+    DATABASE_URL="sqlite:///:memory:" pytest -vvv ./tests
+
+**Warning:** some tests will be skipped, as SQLite doesn't support
+nested transactions.
