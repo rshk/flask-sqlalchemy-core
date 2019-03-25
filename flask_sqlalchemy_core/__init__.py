@@ -72,3 +72,7 @@ class FlaskSQLAlchemy:
                              get_ident())
                 trans.rollback()
                 raise
+
+    def execute(self, *args, **kwargs):
+        with self.connect() as conn:
+            return conn.execute(*args, **kwargs)
